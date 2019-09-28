@@ -1,0 +1,6 @@
+GET / HTTP/1.0
+Content-Type: text/html; charset=UTF-8
+Content-Encoding: UTF-8
+Content-Length: 1134
+Accept-Ranges: bytes
+Connection: close
