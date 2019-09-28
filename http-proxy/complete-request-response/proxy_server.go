@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 )
@@ -13,61 +14,39 @@ const (
 
 func main() {
 	fmt.Printf("Running on %v:%v\n", host, port)
-	// Line below takes client request and forwards to destination server.
-	http.HandleFunc("/", handleRequestAndRedirect)
 
-	// Line below takes response from server and forwads to client.
-	http.HandleFunc("", handleResponseAndRedirect)
-	//http.RedirectHandler("localhost:8000", 200)
-	log.Fatal(http.ListenAndServe(host+":"+port, nil))
+	http.HandleFunc("/", forwardToServer)
+	http.ListenAndServe(host+":"+port, nil)
 }
 
-func handleResponseAndRedirect(w http.ResponseWriter, r *http.Request) {
-	url := r.URL
-	url.Host = "localhost:8000"
-	url.Scheme = "http"
-
-	proxyReq, err := http.NewRequest(r.Method, url.String(), r.Body)
+func forwardToServer(w http.ResponseWriter, r *http.Request) {
+	proxyReq, err := http.NewRequest("GET", "http://localhost:9000/", nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	proxyReq.Header.Set("Host", r.Host)
-	proxyReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
-
-	proxyReq.Header = r.Header
-	//for header, values := range r.Header {
-	//	for _, value := range values {
-	//		proxyReq.Header.Add(header, value)
-	//	}
-	//}
+	for header, values := range r.Header {
+		for _, value := range values {
+			fmt.Printf("header value: %v \n\n", value)
+			proxyReq.Header.Add(header, value)
+		}
+	}
 
 	client := &http.Client{}
-	client.Do(proxyReq)
-}
 
-func handleRequestAndRedirect(w http.ResponseWriter, r *http.Request) {
-	url := r.URL
-	url.Host = "localhost:8000"
-	url.Scheme = "http"
-
-	proxyReq, err := http.NewRequest(r.Method, url.String(), r.Body)
+	resp, err := client.Do(proxyReq)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	defer resp.Body.Close()
 
-	proxyReq.Header.Set("Host", r.Host)
-	proxyReq.Header.Set("X-Forwarded-For", r.RemoteAddr)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Println(string(body))
 
-	proxyReq.Header = r.Header
-	//for header, values := range r.Header {
-	//	for _, value := range values {
-	//		proxyReq.Header.Add(header, value)
-	//	}
-	//}
-
-	client := &http.Client{}
-	client.Do(proxyReq)
+	w.Write(body)
 }
