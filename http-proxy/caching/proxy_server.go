@@ -8,9 +8,12 @@ import (
 )
 
 const (
-	host = "localhost"
-	port = "7000"
+	host       = "localhost"
+	port       = "7000"
+	serverPort = "9000"
 )
+
+var cache = make(map[string][]byte)
 
 func main() {
 	fmt.Printf("Running on %v:%v\n", host, port)
@@ -20,7 +23,21 @@ func main() {
 }
 
 func forwardToServer(w http.ResponseWriter, r *http.Request) {
-	proxyReq, err := http.NewRequest("GET", "http://localhost:9000/", nil)
+	path := r.URL.Path
+	fmt.Println("Path: ", path)
+
+	// First we chech our cache.
+	// If we have the response cached, we return it.
+	if _, ok := cache[path]; ok {
+		fmt.Println("retrieving from cache")
+		w.Write(cache[path])
+		return
+	}
+
+	// If the response is not cached, then we forward to our server.
+	url := "http://" + host + ":" + serverPort + "/"
+
+	proxyReq, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -28,7 +45,6 @@ func forwardToServer(w http.ResponseWriter, r *http.Request) {
 
 	for header, values := range r.Header {
 		for _, value := range values {
-			fmt.Printf("header value: %v \n\n", value)
 			proxyReq.Header.Add(header, value)
 		}
 	}
@@ -47,6 +63,10 @@ func forwardToServer(w http.ResponseWriter, r *http.Request) {
 		log.Fatalln(err)
 	}
 	fmt.Println(string(body))
+
+	// Store our response in our cache for future requests for the same resource.
+	cache[path] = body
+	fmt.Println("saved to cache")
 
 	w.Write(body)
 }
